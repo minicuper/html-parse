@@ -1,34 +1,36 @@
-function nodeToString(node) {
-  var elem = safe(node);
-  if (isArray(elem)) {
-    if (elem.length && isArray(elem[0])) {
-      elem = stack(elem);
+{
+  function nodeToString(node) {
+    var elem = safe(node);
+    if (isArray(elem)) {
+      if (elem.length && isArray(elem[0])) {
+        elem = stack(elem);
+      }
+      elem = elem.join('');
     }
-    elem = elem.join('');
+    return elem;
   }
-  return elem;
-}
 
-function textNode(elem) {
-  /*
-   * A text node has
-   * - no leading or trailing whitespace
-   * - no consecutive whitespace characters
-   */
-  return nodeToString(elem).replace(/^\s+|\s+$/g, '').replace(/\s+/g, ' ');
-}
+  function textNode(elem) {
+    /*
+     * A text node has
+     * - no leading or trailing whitespace
+     * - no consecutive whitespace characters
+     */
+    return nodeToString(elem).replace(/^\s+|\s+$/g, '').replace(/\s+/g, ' ');
+  }
 
-function isSelfClosing(tag) {
-    var tags = [
-        'area','base','br','col','command','embed','hr',
-        'img', 'input','keygen','link','meta','param',
-        'source','track', 'wbr'
-      ];
+  function isSelfClosing(tag) {
+      var tags = [
+          'area','base','br','col','command','embed','hr',
+          'img', 'input','keygen','link','meta','param',
+          'source','track', 'wbr'
+        ];
+      return tags.indexOf(tag) != -1;
+    }
+  function canBeSelfClosing(tag){
+    var tags = [];
     return tags.indexOf(tag) != -1;
   }
-function canBeSelfClosing(tag){
-  var tags = [];
-  return tags.indexOf(tag) != -1;
 }
 
 /* Start Grammar */
@@ -64,7 +66,7 @@ tag "HTML Tag"
 
 normal_tag "Tag"
   = otn:(open_tag) sp:(s) c:(content) ctn:(close_tag)
-  //& { return !isSelfClosing(otn.name) /* || otn.name === ctn.name */; }
+  & { return !isSelfClosing(otn.name) /* || otn.name === ctn.name */; }
   {
     var err, attrs, parts = [];
     if (!otn.back) {
