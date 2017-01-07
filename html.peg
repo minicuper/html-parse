@@ -1,0 +1,367 @@
+function nodeToString(node) {
+  var elem = safe(node);
+  if (isArray(elem)) {
+    if (elem.length && isArray(elem[0])) {
+      elem = stack(elem);
+    }
+    elem = elem.join('');
+  }
+  return elem;
+}
+
+function textNode(elem) {
+  /*
+   * A text node has
+   * - no leading or trailing whitespace
+   * - no consecutive whitespace characters
+   */
+  return nodeToString(elem).replace(/^\s+|\s+$/g, '').replace(/\s+/g, ' ');
+}
+
+function isSelfClosing(tag) {
+    var tags = [
+        'area','base','br','col','command','embed','hr',
+        'img', 'input','keygen','link','meta','param',
+        'source','track', 'wbr'
+      ];
+    return tags.indexOf(tag) != -1;
+  }
+function canBeSelfClosing(tag){
+  var tags = [];
+  return tags.indexOf(tag) != -1;
+}
+
+/* Start Grammar */
+start
+  = st:(content)
+  { return st;}
+
+/* HTML node types*/
+
+content "Content"
+  = c:(node)*
+  { return c; }
+
+node "Node"
+  = n:(node_types) s
+  { return n; }
+
+node_types "Node Types"
+  = tag
+  / comment
+  / text_node
+
+comment_nodes "Comment Node Types"
+  = tag
+  / text_node
+
+/* HTML elements*/
+
+tag "HTML Tag"
+   = self_closing_tag_shortcut
+  / normal_tag
+  / self_closing_tag
+
+normal_tag "Tag"
+  = otn:(open_tag) sp:(s) c:(content) ctn:(close_tag)
+  //& { return !isSelfClosing(otn.name) /* || otn.name === ctn.name */; }
+  {
+    var err, attrs, parts = [];
+    if (!otn.back) {
+        return error("The " + esc(otn.name) + " element is missing part of its opening tag");
+    } else if(!(ctn.front && ctn.back)) {
+      // TODO: Find another solution without displaying unencoded brackets
+      // if (!ctn.front) { parts.push('</'); }
+      // if (!ctn.back) { parts.push('>'); }
+      // return error("The <" + otn.name + "> tag is missing part (" + parts.join(', ') + ") of its closing tag");
+      return error("The " + esc(otn.name) + " element is missing part of its closing tag");
+    } else if (otn.name !== ctn.name) {
+      return error("Expected open tag " + esc(otn.name) + " to match closing tag " + esc(ctn.name) + "");
+    } /*else if (isSelfClosing(otn.name)) {
+      return error("The " + esc(otn.name) + " tag is a void element and should not have a closing tag");
+    }*/ else if ('error' in otn.attributes)) {
+      return error(otn.attributes.error);
+    } /*else if ((err = isValidChildren(otn.name, otn.attributes, c)) !== true) {
+      return error(err.error);
+    }*/
+    return {
+      'type': 'element',
+      'void': false,
+      'name': otn.name,
+      'attributes': otn.attributes,
+      'children': c
+    };
+  }
+
+self_closing_tag_shortcut
+  = "<" s t:(tagname) attrs:(tag_attribute)* s cl:("/") s e:(">") s
+  {
+    var attrs;
+    if(!canBeSelfClosing(t)) {
+      return error("" + esc(t) + "" + " is not a valid self closing tag");
+    }
+
+    //if ('error' in attrs)) {
+    //  return error(attrs.error);
+    //}
+
+    return {
+      'type': 'element',
+      'void': true,
+      'name': t,
+      'attributes': attrs,
+      'children': []
+    };
+  }
+
+
+self_closing_tag "Self-closing Tag"
+  = ot:(open_tag)
+  {
+    var attrs;
+    if (!ot.back) {
+      return error("The " + esc(ot.name) + " element is missing part of its opening tag");
+    } else if(!isSelfClosing(ot.name)) {
+      return error("" + esc(ot.name) + "" + " is not a valid self closing tag");
+    }
+
+    if (false && ot.closing !== null) {
+      /*
+      TODO: Note - This is where you would toggle on/off the error thrown when using the XHTML
+            method of a self-closing tag.
+      */
+      return error("The XHTML self-closing tag format for " + esc(ot.name) + " is not allowed in HTML 5");
+    } else if (error in ot.attributes) {
+      return error(ot.attributes.error);
+    }
+
+    return {
+      'type': 'element',
+      'void': true,
+      'name': ot.name,
+      'attributes': ot.attributes,
+      'children': []
+    };
+    // return "<" + ot + ">";
+  }
+
+open_tag "Opening Tag"
+  = "<" s t:(tagname) attrs:(tag_attribute)* s cl:("/")? s e:(">")? s
+  {
+    return {
+      'name': t,
+      'attributes': attrs,
+      'closing': cl,
+      'back': e !== null
+    };
+  }
+
+close_tag "Closing Tag"
+  = o:("</")? s t:(tagname) s c:(">")?
+  {
+    return {
+      'name': t,
+      'front': o !== null,
+      'back': c !== null
+    };
+  }
+
+/* HTML element attributes*/
+
+tagname "Tag Name"
+  = tns:([A-Za-z]) tne:([0-9A-Z_a-z-])*
+  { 
+    var tn = [tns].concat(tne);
+    return textNode(tn);
+  }
+
+tag_attribute "Attribute"
+  = e ta:(tag_attribute_name) t:(attr_assignment)?
+  {
+    return {
+      'name': ta,
+      'value': t
+    };
+  }
+
+tag_attribute_name "Attribute Name"
+  = s n:([^\=\/\\ <>]*)
+  /*= s n:(![\/\>\"\'\= ] char)**/
+  /*= s n:(![^\t\n\f \/>"'=] char)**/
+  & { return n.length; }
+  {
+    return textNode(n);
+  }
+
+tag_attribute_value_dblquote "Attribute Value (Double Quoted)"
+  =	tag_attribute_value_dblquote_empty
+  / tag_attribute_value_dblquote_value
+
+tag_attribute_value_dblquote_value
+  = '"' v:([^"])* '"'
+  { return { 'value': textNode(v), 'unquoted': false }; }
+
+tag_attribute_value_dblquote_empty
+  = '"' v:([\s])* '"'
+  { return { 'value': '', 'unquoted': false }; }
+
+tag_attribute_value_singlequote "Attribute Value (Single Quoted)"
+  =	tag_attribute_value_singlequote_empty
+  / tag_attribute_value_singlequote_value
+
+tag_attribute_value_singlequote_value
+  = "'" v:([^'])* "'"
+  { return { 'value': textNode(v), 'unquoted': false }; }
+
+tag_attribute_value_singlequote_empty
+  = "'" v:([\s])* "'"
+  { return { 'value': '', 'unquoted': false }; }
+
+tag_attribute_value_noquote "Attribute Value (Unquoted)"
+  = v:([^ >])+
+  { return { 'value': textNode(v), 'unquoted': true }; }
+
+tag_attribute_value "Attribute Value"
+  = tag_attribute_value_dblquote
+  / tag_attribute_value_singlequote
+  / tag_attribute_value_noquote
+
+attr_assignment "Attribute Assignment"
+  = s "=" s i:(tag_attribute_value)?
+  {
+    // NOTE: equal sign in <meta> tag attribute values, quotes in <style> tags
+    var matches, disallowed;
+    if(i == null) {
+      return error("Found an attribute assignment " + esc.val('=') + " not followed by a value");
+    } else {
+      // TODO: Move this this check up to a place where tag name is available
+      // TODO: & could be allowed in event attributes
+      if (i.unquoted) {
+        // Note: https://html.spec.whatwg.org/multipage/syntax.html#attribute-value-(unquoted)-state
+        disallowed = /[ \f\n\r\t\v\/<>&"'`=]+/;
+      } else {
+        // Note: https://html.spec.whatwg.org/multipage/syntax.html#attribute-value-(double-quoted)-state
+        disallowed = /(&(?![^\s]+;)+)/;
+      }
+      if (disallowed.test(i.value)) {
+        matches = i.value.match(disallowed);
+        return error("Disallowed character " + esc.val(matches[0]) + " found in attribute value");
+      }
+    }
+    return i;
+  }
+
+/* HTML text element*/
+
+text_node "Text Node"
+= tn:(chars)
+{
+  return {
+    'type': 'text',
+    'contents': tn
+  };
+}
+
+/* HTML block comments*/
+
+comment "Block Comment"
+  = comment_open com:(comment_content) cc:(comment_close)?
+  {
+    if (cc === null) {
+      return error('Found an open HTML comment tag without a closing tag');
+    }
+    return com;
+  }
+
+comment_open "Comment Start"
+  = "<!--"
+
+comment_close "Comment Close"
+  = "-->"
+
+comment_content
+  = comment_conditional
+  / comment_block
+
+comment_block
+  = s cb:comment_scan s
+  {
+    var tn = cb !== null ? textNode(cb) : '';
+    if(tn.indexOf('--') !== -1) {
+      return error("Cannot have two or more consecutive hyphens " + esc.val('--') + " inside of a block comment");
+    }
+    return {
+      'type': 'comment',
+      'conditional': false,
+      'condition': null,
+      'children': {
+        'type': 'text',
+        'contents': tn
+      }
+    };
+  }
+
+comment_scan
+  = cs:(!comment_close .)*
+  { return textNode(cs);  }
+
+comment_conditional_scan
+  = cs:(!conditional_end .)*
+  { return cs;  }
+
+/* HTML conditional block comments*/
+
+comment_conditional
+  = s cons:(conditional_start)? s com:(comment_conditional_scan) s cone:(conditional_end)? s
+  ! { return cons === null && cone === null; }
+  {
+    var condition = '';
+    if (cone === null) {
+      return error("Conditional comment start tag found without conditional comment end tag");
+    } else if (cons === null) {
+      return error("Conditional comment end tag found without conditional comment start tag");
+    } else {
+      condition = cons;
+    }
+    return {
+      'type': 'comment',
+      'conditional': true,
+      'condition': condition,
+      'children': com
+    };
+  }
+
+conditional_start
+  = "[" s csc:([^\]]+)? s "]>"
+{ return csc; }
+
+conditional_end
+  = "<!" s "[" s "endif" s "]"
+  { return true; }
+
+comment_conditional_body
+  = ccb:(conditional_scan)
+
+conditional_scan
+  = cs:(!conditional_terminator [^<>])*
+  { return textNode(cs); }
+
+conditional_terminator
+  = conditional_end
+  / comment_close
+
+/* Generic rules*/
+
+any "Anything"
+  /*= a:([\s\S])* { return textNode(a); }*/
+  /*= [\s\S]*/
+  = .
+
+chars "Characters"
+  = c:([^<>])+ { return textNode(c); }
+
+e "Enforced Whitespace"
+  = [ \f\n\r\t\v]+
+
+s "Optional Whitespace"
+  = [ \f\n\r\t\v]*
