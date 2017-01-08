@@ -1,4 +1,24 @@
 {
+
+  function esc(n){
+    return n;
+  }
+  function safe(obj) {
+    // If it is not a string or array, is it not safe
+    return ((isArray(obj) || isString(obj)) ? obj : []);
+  }
+
+  function isString(obj) {
+    return typed(obj) === "[object String]";
+  }
+
+  function isArray(obj) {
+    if (Array.isArray) {
+      return Array.isArray(obj);
+    }
+    return typed(obj) === "[object Array]";
+  }
+  
   function nodeToString(node) {
     var elem = safe(node);
     if (isArray(elem)) {
@@ -27,9 +47,10 @@
         ];
       return tags.indexOf(tag) != -1;
     }
+    
   function canBeSelfClosing(tag){
     var tags = [];
-    return tags.indexOf(tag) != -1;
+    return isSelfClosing(tag) || tags.indexOf(tag) != -1;
   }
 }
 
@@ -79,9 +100,9 @@ normal_tag "Tag"
       return error("The " + esc(otn.name) + " element is missing part of its closing tag");
     } else if (otn.name !== ctn.name) {
       return error("Expected open tag " + esc(otn.name) + " to match closing tag " + esc(ctn.name) + "");
-    } /*else if (isSelfClosing(otn.name)) {
+    } else if (isSelfClosing(otn.name)) {
       return error("The " + esc(otn.name) + " tag is a void element and should not have a closing tag");
-    }*/ else if ('error' in otn.attributes)) {
+    } else if ('error' in otn.attributes) {
       return error(otn.attributes.error);
     } /*else if ((err = isValidChildren(otn.name, otn.attributes, c)) !== true) {
       return error(err.error);
@@ -103,9 +124,9 @@ self_closing_tag_shortcut
       return error("" + esc(t) + "" + " is not a valid self closing tag");
     }
 
-    //if ('error' in attrs)) {
-    //  return error(attrs.error);
-    //}
+    if ('error' in attrs) {
+      return error(attrs.error);
+    }
 
     return {
       'type': 'element',
@@ -144,7 +165,6 @@ self_closing_tag "Self-closing Tag"
       'attributes': ot.attributes,
       'children': []
     };
-    // return "<" + ot + ">";
   }
 
 open_tag "Opening Tag"
@@ -219,14 +239,9 @@ tag_attribute_value_singlequote_empty
   = "'" v:([\s])* "'"
   { return { 'value': '', 'unquoted': false }; }
 
-tag_attribute_value_noquote "Attribute Value (Unquoted)"
-  = v:([^ >])+
-  { return { 'value': textNode(v), 'unquoted': true }; }
-
 tag_attribute_value "Attribute Value"
   = tag_attribute_value_dblquote
   / tag_attribute_value_singlequote
-  / tag_attribute_value_noquote
 
 attr_assignment "Attribute Assignment"
   = s "=" s i:(tag_attribute_value)?
@@ -234,7 +249,7 @@ attr_assignment "Attribute Assignment"
     // NOTE: equal sign in <meta> tag attribute values, quotes in <style> tags
     var matches, disallowed;
     if(i == null) {
-      return error("Found an attribute assignment " + esc.val('=') + " not followed by a value");
+      return error("Found an attribute assignment " + esc('=') + " not followed by a value");
     } else {
       // TODO: Move this this check up to a place where tag name is available
       // TODO: & could be allowed in event attributes
