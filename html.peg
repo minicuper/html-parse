@@ -239,9 +239,22 @@ tag_attribute_value_singlequote_empty
   = "'" v:([\s])* "'"
   { return { 'value': '', 'unquoted': false }; }
 
+tag_attribute_value_noquote "Attribute Value (Unquoted)"
+  = v:([^ >])+
+  { return { 'value': textNode(v), 'unquoted': true }; }
+  
+tag_attribute_value_curly "Attribute Value Curly Braces (Inquoted)"  
+  = pre:('{{') v:(!"}}".)* post:('}}')
+  	{ 
+    	var value = pre + v.map(function(item){return item[1]}).join('') + post;
+    	return {value: value, curly: true}
+    }
+  
 tag_attribute_value "Attribute Value"
   = tag_attribute_value_dblquote
   / tag_attribute_value_singlequote
+  / tag_attribute_value_curly
+  / tag_attribute_value_noquote  
 
 attr_assignment "Attribute Assignment"
   = s "=" s i:(tag_attribute_value)?
@@ -262,7 +275,7 @@ attr_assignment "Attribute Assignment"
       }
       if (disallowed.test(i.value)) {
         matches = i.value.match(disallowed);
-        return error("Disallowed character " + esc.val(matches[0]) + " found in attribute value");
+        return error("Disallowed character " + esc(matches[0]) + " found in attribute value");
       }
     }
     return i;
@@ -382,3 +395,4 @@ e "Enforced Whitespace"
 
 s "Optional Whitespace"
   = [ \f\n\r\t\v]*
+
