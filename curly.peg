@@ -1,0 +1,52 @@
+{
+  function getText(v){
+      return v.map(function(item){return item[item.length -1]}).join('');
+    }
+}
+
+Expression
+  = v:(item*) {return v} 
+
+item = text / block / curly 
+
+block "Block" 
+  = block:blockStart val:Expression blockEnd
+    {return {type: block.name, exp: block.exp, val: val}; }
+    
+blockStart "Block Start"
+  = pre:('{{') name:blockName e e:nocurly post:'}}'
+  {return {name: name, exp: e}}
+  
+blockName = 'each' / 'with'
+
+blockEnd "Block End"  
+  = '{{/}}'
+  
+curly "Curly"
+
+  = '{{' !blockName val:nocurly '}}'
+    { 
+      return {type: 'curly', val: val, curly: true}
+    }
+    
+nocurly "No Curly"    
+  = !'/' v:(!"}}"!"{{".)*
+  { return getText(v)}
+  
+text "Text Node"
+  = tn:(chars)
+  {
+    return {
+      'type': 'text',
+      'contents': tn.trim()
+    };
+  }    
+  
+chars "Characters"
+  = c:(!"{{"!"}}".)+ { return getText(c); }  
+
+e "Enforced Whitespace"
+  = [ \f\n\r\t\v]+
+  
+s "Optional Whitespace"
+  = [ \f\n\r\t\v]*
